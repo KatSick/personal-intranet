@@ -1,0 +1,47 @@
+version: "3"
+
+volumes:
+  qbt_data:
+    name: qbt_data
+  filebrowser_data:
+    name: filebrowser_data
+
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    ports:
+      - 8082:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:libtorrentv1
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+      - WEBUI_PORT=8080
+    volumes:
+      - qbt_data:/config
+      - /mnt/usb1:/downloads
+    ports:
+      - 8080:8080
+      - 6881:6881
+      - 6881:6881/udp
+    restart: unless-stopped
+
+  filebrowser:
+    container_name: filebrowser
+    image: hurlenko/filebrowser:latest
+    ports:
+      - 8088:8080
+    volumes:
+      - /:/data
+      - filebrowser_data:/config
+    environment:
+      - FB_BASEURL=/
+      - FB_NOAUTH
+    restart: unless-stopped
