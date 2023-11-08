@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:libtorrentv1
+    image: lscr.io/linuxserver/qbittorrent
     container_name: qbittorrent
     environment:
       - PUID=1000
@@ -26,7 +26,10 @@ services:
       - WEBUI_PORT=8080
     volumes:
       - qbt_data:/config
-      - /mnt/usb1:/downloads
+      - /mnt/usb1/films:/films
+      - /mnt/usb1/files:/files
+      - /mnt/usb1/tvshows:/tvshows
+      - /mnt/usb1/incomplete:/incomplete
     ports:
       - 8080:8080
       - 6881:6881
@@ -41,6 +44,7 @@ services:
     volumes:
       - /:/data
       - filebrowser_data:/config
+      - qbt_data:/data/qbt_data
     environment:
       - FB_BASEURL=/
       - FB_NOAUTH
