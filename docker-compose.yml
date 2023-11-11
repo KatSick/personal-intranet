@@ -26,10 +26,7 @@ services:
       - WEBUI_PORT=8080
     volumes:
       - qbt_data:/config
-      - /mnt/usb1/films:/films
-      - /mnt/usb1/files:/files
-      - /mnt/usb1/tvshows:/tvshows
-      - /mnt/usb1/incomplete:/incomplete
+      - /mnt/usb1:/downloads
     ports:
       - 8080:8080
       - 6881:6881
