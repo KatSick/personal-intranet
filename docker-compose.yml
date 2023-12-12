@@ -3,12 +3,16 @@ version: "3"
 volumes:
   qbt_data:
     name: qbt_data
-  filebrowser_data:
-    name: filebrowser_data
-  homeassistant_data:
-    name: homeassistant_data
-  switchbotmqtt_data:
-    name: switchbotmqtt_data
+  jellyfin_config:
+    name: jellyfin_config
+  jellyfin_cache:
+    name: jellyfin_cache
+  gitlab_data:
+    name: gitlab_data
+  gitlab_logs:
+    name: gitlab_logs
+  gitlab_config:
+    name: gitlab_config
 
 services:
   dozzle:
@@ -21,7 +25,7 @@ services:
     restart: unless-stopped
 
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:4.6.2
     container_name: qbittorrent
     environment:
       - PUID=1000
@@ -30,49 +34,86 @@ services:
       - WEBUI_PORT=8080
     volumes:
       - qbt_data:/config
-      - /mnt/usb1:/downloads
+      - /mnt/media/movies:/downloads/movies
+      - /mnt/media/tvshows:/downloads/tvshows
+      - /mnt/media/files:/downloads/files
+      - /tmp:/downloads/incomplete
     ports:
       - 8080:8080
       - 6881:6881
       - 6881:6881/udp
     restart: unless-stopped
 
-  filebrowser:
-    container_name: filebrowser
-    image: hurlenko/filebrowser:latest
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    volumes:
+      - jellyfin_config:/config
+      - jellyfin_cache:/cache
+      - /mnt/media:/media
+    restart: "unless-stopped"
+    group_add:
+      - "104"
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
     ports:
-      - 8088:8080
-    volumes:
-      - /:/data
-      - filebrowser_data:/config
-      - qbt_data:/data/qbt_data
-    environment:
-      - FB_BASEURL=/
-      - FB_NOAUTH
-    restart: unless-stopped
+      - 8096:8096
 
-  homeassistant:
-    container_name: homeassistant
-    image: ghcr.io/home-assistant/home-assistant:stable
-    volumes:
-      - homeassistant_data:/config
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
-    privileged: true
-    network_mode: host
-    environment:
-      - TZ=Europe/Kyiv
+  #  gitlab:
+  #   image: 'gitlab/gitlab-ee:latest'
+  #   restart: "unless-stopped"
+  #   container_name: gitlab
+  #   hostname: '192.168.3.111'
+  #   environment:
+  #     GITLAB_OMNIBUS_CONFIG: |
+  #       external_url 'http://192.168.3.111'
+  #       # Add any other gitlab.rb configuration here, each on its own line
+  #   ports:
+  #     - '80:80'
+  #     - '443:443'
+  #     - '22:22'
+  #   volumes:
+  #     - gitlab_config:/etc/gitlab'
+  #     - gitlab_logs:/var/log/gitlab'
+  #     - gitlab_data:/var/opt/gitlab'
+  #   shm_size: '256m'
 
-  matter-server:
-    image: ghcr.io/home-assistant-libs/python-matter-server:stable
-    container_name: matter-server
-    restart: unless-stopped
-    # Required for mDNS to work correctly
-    network_mode: host
-    security_opt:
-      # Needed for Bluetooth via dbus
-      - apparmor:unconfined
-    volumes:
-      # Create an .env file that sets the USERDIR environment variable.
-      - ${USERDIR:-$HOME}/docker/matter-server/data:/data/
-      - /run/dbus:/run/dbus:ro
+  # filebrowser:
+  #   container_name: filebrowser
+  #   image: hurlenko/filebrowser:latest
+  #   ports:
+  #     - 8088:8080
+  #   volumes:
+  #     - /:/data
+  #     - filebrowser_data:/config
+  #     - qbt_data:/data/qbt_data
+  #   environment:
+  #     - FB_BASEURL=/
+  #     - FB_NOAUTH
+  #   restart: unless-stopped
+
+  # homeassistant:
+  #   container_name: homeassistant
+  #   image: ghcr.io/home-assistant/home-assistant:stable
+  #   volumes:
+  #     - homeassistant_data:/config
+  #     - /etc/localtime:/etc/localtime:ro
+  #   restart: unless-stopped
+  #   privileged: true
+  #   network_mode: host
+  #   environment:
+  #     - TZ=Europe/Kyiv
+
+  # matter-server:
+  #   image: ghcr.io/home-assistant-libs/python-matter-server:stable
+  #   container_name: matter-server
+  #   restart: unless-stopped
+  #   # Required for mDNS to work correctly
+  #   network_mode: host
+  #   security_opt:
+  #     # Needed for Bluetooth via dbus
+  #     - apparmor:unconfined
+  #   volumes:
+  #     # Create an .env file that sets the USERDIR environment variable.
+  #     - ${USERDIR:-$HOME}/docker/matter-server/data:/data/
+  #     - /run/dbus:/run/dbus:ro
