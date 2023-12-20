@@ -7,6 +7,8 @@ volumes:
     name: jellyfin_config
   jellyfin_cache:
     name: jellyfin_cache
+  gitlabrunner_config:
+    name: gitlabrunner_config
   gitlab_data:
     name: gitlab_data
   gitlab_logs:
@@ -65,6 +67,7 @@ services:
     image: homebridge/homebridge:latest
     restart: unless-stopped
     network_mode: host
+    container_name: homebridge
     volumes:
       - homebridge_data:/homebridge
     logging:
@@ -79,30 +82,32 @@ services:
       start_period: 300s
       timeout: 2s
 
-  # gitlab:
-  #   image: "gitlab/gitlab-ce:latest"
-  #   restart: "unless-stopped"
-  #   container_name: gitlab
-  #   hostname: "192.168.3.111"
-  #   environment:
-  #     GITLAB_OMNIBUS_CONFIG: |
-  #       external_url 'http://192.168.3.111:8888'
-  #       gitlab_rails['gitlab_shell_ssh_port'] = 2224
-  #       # Add any other gitlab.rb configuration here, each on its own line
-  #   ports:
-  #     - "8888:8888"
-  #     # - "443:443"
-  #     - "2224:2224"
-  #   volumes:
-  #     - gitlab_config:/etc/gitlab'
-  #     - gitlab_logs:/var/log/gitlab'
-  #     - gitlab_data:/var/opt/gitlab'
-  #   shm_size: "256m"
+  gitlab:
+    image: "gitlab/gitlab-ce:16.1.1"
+    restart: "unless-stopped"
+    container_name: gitlab
+    hostname: "192.168.3.111"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://192.168.3.111:8888'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224
+        # Add any other gitlab.rb configuration here, each on its own line
+    ports:
+      - "8888:8888"
+      # - "443:443"
+      - "2224:2224"
+    volumes:
+      - gitlab_config:/etc/gitlab'
+      - gitlab_logs:/var/log/gitlab'
+      - gitlab_data:/var/opt/gitlab'
+    shm_size: "256m"
 
-  # gitlab-runner:
-  #   restart: "unless-stopped"
-  #   container_name: gitlab-runner
-  #   image: gitlab/gitlab-runner:alpine
+  gitlab-runner:
+    restart: "unless-stopped"
+    container_name: gitlab-runner
+    image: gitlab/gitlab-runner:alpine
+    volumes:
+      - gitlabrunner_config:/etc/gitlab-runner:z
 
   # filebrowser:
   #   container_name: filebrowser
