@@ -82,67 +82,27 @@ services:
       start_period: 300s
       timeout: 2s
 
-  gitlab:
-    image: "gitlab/gitlab-ce:latest"
-    restart: "unless-stopped"
-    container_name: gitlab
-    hostname: "192.168.3.111"
-    environment:
-      GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://192.168.3.111:8888'
-        # Add any other gitlab.rb configuration here, each on its own line
-    ports:
-      - "8888:8888"
-      - "2224:22"
-    volumes:
-      - gitlab_config:/etc/gitlab'
-      - gitlab_logs:/var/log/gitlab'
-      - gitlab_data:/var/opt/gitlab'
-    shm_size: "256m"
-
-  gitlab-runner:
-    restart: "unless-stopped"
-    container_name: gitlab-runner
-    image: gitlab/gitlab-runner:alpine
-    volumes:
-      - gitlabrunner_config:/etc/gitlab-runner:z
-
-  # filebrowser:
-  #   container_name: filebrowser
-  #   image: hurlenko/filebrowser:latest
+  # gitlab:
+  #   image: "gitlab/gitlab-ce:latest"
+  #   restart: "unless-stopped"
+  #   container_name: gitlab
+  #   hostname: "192.168.3.111"
+  #   environment:
+  #     GITLAB_OMNIBUS_CONFIG: |
+  #       external_url 'http://192.168.3.111:8888'
+  #       # Add any other gitlab.rb configuration here, each on its own line
   #   ports:
-  #     - 8088:8080
+  #     - "8888:8888"
+  #     - "2224:22"
   #   volumes:
-  #     - /:/data
-  #     - filebrowser_data:/config
-  #     - qbt_data:/data/qbt_data
-  #   environment:
-  #     - FB_BASEURL=/
-  #     - FB_NOAUTH
-  #   restart: unless-stopped
+  #     - gitlab_config:/etc/gitlab'
+  #     - gitlab_logs:/var/log/gitlab'
+  #     - gitlab_data:/var/opt/gitlab'
+  #   shm_size: "256m"
 
-  # homeassistant:
-  #   container_name: homeassistant
-  #   image: ghcr.io/home-assistant/home-assistant:stable
+  # gitlab-runner:
+  #   restart: "unless-stopped"
+  #   container_name: gitlab-runner
+  #   image: gitlab/gitlab-runner:alpine
   #   volumes:
-  #     - homeassistant_data:/config
-  #     - /etc/localtime:/etc/localtime:ro
-  #   restart: unless-stopped
-  #   privileged: true
-  #   network_mode: host
-  #   environment:
-  #     - TZ=Europe/Kyiv
-
-  # matter-server:
-  #   image: ghcr.io/home-assistant-libs/python-matter-server:stable
-  #   container_name: matter-server
-  #   restart: unless-stopped
-  #   # Required for mDNS to work correctly
-  #   network_mode: host
-  #   security_opt:
-  #     # Needed for Bluetooth via dbus
-  #     - apparmor:unconfined
-  #   volumes:
-  #     # Create an .env file that sets the USERDIR environment variable.
-  #     - ${USERDIR:-$HOME}/docker/matter-server/data:/data/
-  #     - /run/dbus:/run/dbus:ro
+  #     - gitlabrunner_config:/etc/gitlab-runner:z
