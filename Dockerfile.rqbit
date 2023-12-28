@@ -1,0 +1,5 @@
+from ubuntu
+workdir /usr
+run apt update && apt install wget -y
+run wget https://github.com/ikatson/rqbit/releases/download/v5.4.0/rqbit-linux-static-x86_64 -O /usr/rqbit && chmod +x /usr/rqbit
+entrypoint ["/usr/rqbit", "server", "start", "/downloads"]

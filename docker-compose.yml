@@ -82,6 +82,18 @@ services:
       start_period: 300s
       timeout: 2s
 
+  # https://github.com/ikatson/rqbit
+  # rqbit:
+  #   restart: unless-stopped
+  #   container_name: rqbit
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.rqbit
+  #   volumes:
+  #     - ./downloads:/downloads
+  #   ports:
+  #     - 3030:3030
+
   # gitlab:
   #   image: "gitlab/gitlab-ce:latest"
   #   restart: "unless-stopped"
