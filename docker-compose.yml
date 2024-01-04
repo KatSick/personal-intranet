@@ -64,7 +64,7 @@ services:
       - 8096:8096
 
   homebridge:
-    image: homebridge/homebridge:latest
+    image: homebridge/homebridge:2023-12-30
     restart: unless-stopped
     network_mode: host
     container_name: homebridge
