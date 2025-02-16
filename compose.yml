@@ -12,7 +12,7 @@ services:
       - PUID=1000
       - PGID=1000
       - UMASK=002
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
     volumes:
       - /docker/appdata/readarr/config:/config
       - /data/media/downloads:/data/media/downloads
@@ -34,7 +34,7 @@ services:
     container_name: overseerr
     environment:
       # - LOG_LEVEL=debug
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
       - PORT=5055 #optional
     ports:
       - 5055:5055
@@ -51,7 +51,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
       - VERSION=docker
       - PLEX_CLAIM= #optional
     volumes:
@@ -66,7 +66,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
       - WEBUI_PORT=8080
       - TORRENTING_PORT=6881
     volumes:
@@ -90,7 +90,7 @@ services:
       - PUID=1000
       - PGID=1000
       - UMASK=002
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
     volumes:
       - /docker/appdata/prowlarr:/config
 
@@ -105,7 +105,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /docker/appdata/radarr:/config
@@ -122,7 +122,7 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=Europe/Amsterdam
+      - TZ=Europe/Kyiv
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /docker/appdata/sonarr:/config
@@ -138,6 +138,8 @@ services:
     restart: unless-stopped
     privileged: true
     network_mode: host
+    environment:
+      - TZ=Europe/Kyiv
 
   homarr:
     container_name: homarr
@@ -176,3 +178,26 @@ services:
       - /dev/dri/renderD128:/dev/dri/renderD128
     ports:
       - 8096:8096
+  
+  wireguard:
+    image: linuxserver/wireguard:latest
+    container_name: wireguard
+    ports:
+      - 51820:51820/udp
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Kyiv
+      - SERVERURL=${PUBLIC_IP}
+      - PEERDNS=192.168.3.1 # Set to your router, or your local DNS server
+      - SERVERPORT=51820
+      - PEERS=phone,laptop
+      - ALLOWEDIPS=192.168.3.0/24 # Set your local network address range
+      - INTERNAL_SUBNET=192.168.4.0/24 # Be sure that it is not intersect with you REAL local subnetwork range
+    volumes:
+      - /docker/appdata/wireguard/config:/config
+      - /lib/modules:/lib/modules
