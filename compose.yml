@@ -15,11 +15,10 @@ services:
       - TZ=Europe/Kyiv
     volumes:
       - /docker/appdata/readarr/config:/config
-      - /data/media/downloads:/data/media/downloads
-      - /data/media/books:/data/media/books
+      - /data/media/library/books:/data/media/library/books
 
   portainer:
-    image: portainer/portainer-ce:2.25.1
+    image: portainer/portainer-ce:2.27.5
     container_name: portainer
     restart: unless-stopped
     ports:
@@ -46,8 +45,6 @@ services:
     image: lscr.io/linuxserver/plex:latest
     container_name: plex
     network_mode: host
-    devices:
-      - /dev/dri:/dev/dri
     environment:
       - PUID=1000
       - PGID=1000
@@ -56,8 +53,12 @@ services:
       - PLEX_CLAIM= #optional
     volumes:
       - /docker/appdata/plex:/config
-      - /data/media/tvshows:/data/media/tvshows
-      - /data/media/movies:/data/media/movies
+      - /data/media/library/tvshows:/data/media/library/tvshows
+      - /data/media/library/movies:/data/media/library/movies
+    group_add:
+      - "104"
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
     restart: unless-stopped
 
   qbittorrent:
@@ -66,15 +67,13 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
+      - UMASK=0002
       - TZ=Europe/Kyiv
       - WEBUI_PORT=8080
       - TORRENTING_PORT=6881
     volumes:
       - /docker/appdata/qbittorrent/appdata:/config
-      - /data/media/downloads:/data/media/downloads
-      - /data/media/movies:/data/media/movies
-      - /data/media/tvshows:/data/media/tvshows
-      - /data/media/books:/data/media/books
+      - /data/media/torrents:/data/media/torrents
     ports:
       - 8080:8080
       - 6881:6881
@@ -168,8 +167,8 @@ services:
     volumes:
       - /docker/appdata/jellyfil/config:/config
       - /docker/appdata/jellyfil/cache:/config
-      - /data/media/tvshows:/data/media/tvshows
-      - /data/media/movies:/data/media/movies
+      - /data/media/library/tvshows:/data/media/library/tvshows
+      - /data/media/library/movies:/data/media/library/movies
     restart: unless-stopped
     network_mode: host
     group_add:
@@ -201,3 +200,26 @@ services:
     volumes:
       - /docker/appdata/wireguard/config:/config
       - /lib/modules:/lib/modules
+
+  huntarr:
+    image: huntarr/huntarr:latest
+    container_name: huntarr
+    restart: unless-stopped
+    ports:
+      - "9705:9705"
+    volumes:
+      - /docker/appdata/huntarr:/config
+    environment:
+      - TZ=Europe/Kyiv
+
+  flaresolverr:
+    image: flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=Europe/Kyiv
+    ports:
+      - "8191:8191"
+    restart: unless-stopped
