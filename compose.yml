@@ -18,7 +18,7 @@ services:
       - /data/media/library/books:/data/media/library/books
 
   portainer:
-    image: portainer/portainer-ce:2.27.5
+    image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
     ports:
@@ -223,3 +223,18 @@ services:
     ports:
       - "8191:8191"
     restart: unless-stopped
+  
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    volumes:
+      - /docker/appdata/filebrowser:/config
+      - /:/srv
+    environment:
+      - TZ=Europe/Kyiv
+      - PUID=1000
+      - PGID=1000
+      - UMASK=0002
