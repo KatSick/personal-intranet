@@ -161,7 +161,7 @@ services:
     restart: unless-stopped
 
   jellyfin:
-    image: jellyfin/jellyfin:10.11.0-rc3
+    image: jellyfin/jellyfin:10.11.0-rc5
     container_name: jellyfin
     volumes:
       - /docker/appdata/jellyfin/config:/config
