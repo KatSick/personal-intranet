@@ -10,8 +10,7 @@ services:
       - "8787:8787"
     environment:
       - PUID=1000
-      - PGID=1000
-      - UMASK=002
+      - PGID=1000 - UMASK=002
       - TZ=Europe/Kyiv
     volumes:
       - /docker/appdata/readarr/config:/config
@@ -82,7 +81,7 @@ services:
 
   prowlarr:
     container_name: prowlarr
-    image: ghcr.io/hotio/prowlarr:latest
+    image: ghcr.io/hotio/prowlarr:release
     ports:
       - 9696:9696
     environment:
@@ -162,11 +161,11 @@ services:
     restart: unless-stopped
 
   jellyfin:
-    image: jellyfin/jellyfin
+    image: jellyfin/jellyfin:10.11.0-rc3
     container_name: jellyfin
     volumes:
-      - /docker/appdata/jellyfil/config:/config
-      - /docker/appdata/jellyfil/cache:/config
+      - /docker/appdata/jellyfin/config:/config
+      - /docker/appdata/jellyfin/cache:/cache
       - /data/media/library/tvshows:/data/media/library/tvshows
       - /data/media/library/movies:/data/media/library/movies
     restart: unless-stopped
@@ -177,7 +176,7 @@ services:
       - /dev/dri/renderD128:/dev/dri/renderD128
     ports:
       - 8096:8096
-  
+
   wireguard:
     image: linuxserver/wireguard:latest
     container_name: wireguard
@@ -223,7 +222,7 @@ services:
     ports:
       - "8191:8191"
     restart: unless-stopped
-  
+
   filebrowser:
     image: filebrowser/filebrowser:latest
     container_name: filebrowser
