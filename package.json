@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "fmt": "bun run scripts/fmt.ts",
-    "dupgrade": "FORCE_COLORS=1 bun run scripts/update.ts",
+    "fmt": "bun scripts/fmt.ts",
+    "dupgrade": "bun scripts/update.ts",
     "prepare": "husky"
   },
   "devDependencies": {
