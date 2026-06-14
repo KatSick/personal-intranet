@@ -1,239 +1,111 @@
+# Tailscale exposure via tsdproxy: one proxy joins the tailnet and serves any
+# container labelled `tsdproxy.enable: "true"` as its own HTTPS node — no
+# per-app sidecars. To expose a new app, put it on the `proxy` network and add
+# the tsdproxy.* labels (see dockge below). Node state lives in a named volume
+# and the auth key is passed via env, so this works over a remote DOCKER_HOST
+# with no host bind mounts.
+
 volumes:
-  portrainer_data:
-    name: portrainer_data
+  dockge_data:
+    name: dockge_data
+  tsdproxy_data:
+  aiostreams_data:
+
+networks:
+  proxy:
+
+# tsdproxy config injected as a file (not a host bind mount, so it still works
+# over a remote DOCKER_HOST). The key setting is tryDockerInternalNetwork: true
+# — without it tsdproxy reaches targets via host.docker.internal and the host's
+# published port, but our apps only `expose` their port on the `proxy` network
+# (nothing is published to the host), so it 502s. With it enabled, tsdproxy
+# connects to the container's internal IP on the shared proxy network directly.
+configs:
+  tsdproxy_config:
+    content: |
+      defaultProxyProvider: default
+      docker:
+        local:
+          host: unix:///var/run/docker.sock
+          targetHostname: host.docker.internal
+          tryDockerInternalNetwork: true
+          defaultProxyProvider: default
+      tailscale:
+        providers:
+          default:
+            clientId: ${TS_CLIENT_ID:?set TS_CLIENT_ID in .env}
+            clientSecret: ${TS_CLIENT_SECRET:?set TS_CLIENT_SECRET in .env}
+            tags: "tag:homelab" # Optional if tags are defined in each proxy
+        dataDir: /data/
+      http:
+        hostname: 0.0.0.0
+        port: 8080
+      log:
+        level: info
 
 services:
-  readarr:
-    container_name: readarr
-    image: ghcr.io/hotio/readarr
-    ports:
-      - "8787:8787"
-    environment:
-      - PUID=1000
-      - PGID=1000 - UMASK=002
-      - TZ=Europe/Kyiv
-    volumes:
-      - /docker/appdata/readarr/config:/config
-      - /data/media/library/books:/data/media/library/books
-
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
+  tsdproxy:
+    image: almeidapaulopt/tsdproxy:2
     restart: unless-stopped
-    ports:
-      - 8000:8000
-      - 9443:9443
+    networks:
+      - proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portrainer_data:/data
+      - tsdproxy_data:/data
+    # Lets tsdproxy resolve the Docker host gateway as a fallback target route.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # /config/tsdproxy.yaml is tsdproxy's default config path. The auth key is
+    # only used at first registration; the tailnet node then persists in
+    # tsdproxy_data (dataDir: /data) so it stays authenticated across restarts.
+    configs:
+      - source: tsdproxy_config
+        target: /config/tsdproxy.yaml
 
-  overseerr:
-    image: sctx/overseerr:latest
-    container_name: overseerr
-    environment:
-      # - LOG_LEVEL=debug
-      - TZ=Europe/Kyiv
-      - PORT=5055 #optional
-    ports:
-      - 5055:5055
-    volumes:
-      - /docker/appdata/overserr/config:/app/config
+  dockge:
+    image: louislam/dockge:1
     restart: unless-stopped
-
-  plex:
-    image: lscr.io/linuxserver/plex:latest
-    container_name: plex
-    network_mode: host
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Kyiv
-      - VERSION=docker
-      - PLEX_CLAIM= #optional
-    volumes:
-      - /docker/appdata/plex:/config
-      - /data/media/library/tvshows:/data/media/library/tvshows
-      - /data/media/library/movies:/data/media/library/movies
-    group_add:
-      - "104"
-    devices:
-      - /dev/dri/renderD128:/dev/dri/renderD128
-    restart: unless-stopped
-
-  qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: qbittorrent
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - UMASK=0002
-      - TZ=Europe/Kyiv
-      - WEBUI_PORT=8080
-      - TORRENTING_PORT=6881
-    volumes:
-      - /docker/appdata/qbittorrent/appdata:/config
-      - /data/media/torrents:/data/media/torrents
-    ports:
-      - 8080:8080
-      - 6881:6881
-      - 6881:6881/udp
-    restart: unless-stopped
-
-  prowlarr:
-    container_name: prowlarr
-    image: ghcr.io/hotio/prowlarr:release
-    ports:
-      - 9696:9696
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - UMASK=002
-      - TZ=Europe/Kyiv
-    volumes:
-      - /docker/appdata/prowlarr:/config
-
-  radarr:
-    container_name: radarr
-    image: ghcr.io/hotio/radarr:latest
-    restart: unless-stopped
-    logging:
-      driver: json-file
-    ports:
-      - 7878:7878
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Kyiv
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /docker/appdata/radarr:/config
-      - /data:/data
-
-  sonarr:
-    container_name: sonarr
-    image: ghcr.io/hotio/sonarr:latest
-    restart: unless-stopped
-    logging:
-      driver: json-file
-    ports:
-      - 8989:8989
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Kyiv
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /docker/appdata/sonarr:/config
-      - /data:/data
-
-  homeassistant:
-    container_name: homeassistant
-    image: "ghcr.io/home-assistant/home-assistant:stable"
-    volumes:
-      - /docker/appdata/homeassistant:/config
-      - /etc/localtime:/etc/localtime:ro
-      - /run/dbus:/run/dbus:ro
-    restart: unless-stopped
-    privileged: true
-    network_mode: host
-    environment:
-      - TZ=Europe/Kyiv
-
-  homarr:
-    container_name: homarr
-    image: ghcr.io/ajnart/homarr:latest
-    restart: unless-stopped
+    networks:
+      - proxy
+    # tsdproxy discovers this container over the docker socket and serves it as
+    # the tailnet node "dockge", terminating HTTPS on 443 -> dockge's 5001.
+    expose:
+      - "5001"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "dockge"
+      tsdproxy.port.1: "443/https:5001/http"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /docker/appdata/homarr/configs:/app/data/configs
-      - /docker/appdata/homarr/icons:/app/public/icons
-      - /docker/appdata/homarr/data:/data
-    ports:
-      - 7575:7575
-
-  dozzle:
-    image: amir20/dozzle:latest
-    container_name: dozzle
-    ports:
-      - 8887:8080
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    restart: unless-stopped
-
-  jellyfin:
-    image: jellyfin/jellyfin:10.11.0-rc5
-    container_name: jellyfin
-    volumes:
-      - /docker/appdata/jellyfin/config:/config
-      - /docker/appdata/jellyfin/cache:/cache
-      - /data/media/library/tvshows:/data/media/library/tvshows
-      - /data/media/library/movies:/data/media/library/movies
-    restart: unless-stopped
-    network_mode: host
-    group_add:
-      - "104"
-    devices:
-      - /dev/dri/renderD128:/dev/dri/renderD128
-    ports:
-      - 8096:8096
-
-  wireguard:
-    image: linuxserver/wireguard:latest
-    container_name: wireguard
-    ports:
-      - 51820:51820/udp
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
+      - dockge_data:/app/data
+      - /opt/stacks:/opt/stacks
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Kyiv
-      - SERVERURL=${PUBLIC_IP}
-      - PEERDNS=192.168.3.1 # Set to your router, or your local DNS server
-      - SERVERPORT=51820
-      - PEERS=phone,laptop
-      - ALLOWEDIPS=192.168.3.0/24 # Set your local network address range
-      - INTERNAL_SUBNET=192.168.4.0/24 # Be sure that it is not intersect with you REAL local subnetwork range
-    volumes:
-      - /docker/appdata/wireguard/config:/config
-      - /lib/modules:/lib/modules
+      - DOCKGE_STACKS_DIR=/opt/stacks
+      - DOCKGE_ENABLE_CONSOLE=true
 
-  huntarr:
-    image: huntarr/huntarr:latest
-    container_name: huntarr
+  # AIOStreams (Stremio addon aggregator). tsdproxy serves it as the tailnet
+  # node "aiostreams", terminating HTTPS on 443 -> the app's 3000. State (sqlite
+  # db at /app/data) lives in a named volume so it survives over a remote
+  # DOCKER_HOST without host bind mounts.
+  aiostreams:
+    image: ghcr.io/viren070/aiostreams:latest
     restart: unless-stopped
-    ports:
-      - "9705:9705"
+    networks:
+      - proxy
+    expose:
+      - "3000"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "aiostreams"
+      tsdproxy.port.1: "443/https:3000/http"
     volumes:
-      - /docker/appdata/huntarr:/config
+      - aiostreams_data:/app/data
     environment:
-      - TZ=Europe/Kyiv
-
-  flaresolverr:
-    image: flaresolverr/flaresolverr:latest
-    container_name: flaresolverr
-    environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_HTML=${LOG_HTML:-false}
-      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
-      - TZ=Europe/Kyiv
-    ports:
-      - "8191:8191"
-    restart: unless-stopped
-
-  filebrowser:
-    image: filebrowser/filebrowser:latest
-    container_name: filebrowser
-    restart: unless-stopped
-    ports:
-      - "8088:80"
-    volumes:
-      - /docker/appdata/filebrowser:/config
-      - /:/srv
-    environment:
-      - TZ=Europe/Kyiv
-      - PUID=1000
-      - PGID=1000
-      - UMASK=0002
+      # SECRET_KEY must be a 64-char hex string (32 bytes); generate with
+      # `openssl rand -hex 32`.
+      - SECRET_KEY=${AIOSTREAMS_SECRET_KEY:?set AIOSTREAMS_SECRET_KEY in .env}
+      # BASE_URL is the addon's public URL (no trailing slash). Newer images
+      # require it explicitly and exit if it's missing — they no longer derive
+      # it from tsdproxy's forwarded Host/Proto headers. Must match the tailnet
+      # node name (tsdproxy.name above) -> https://aiostreams.<tailnet>.ts.net
+      - BASE_URL=${AIOSTREAMS_BASE_URL:?set AIOSTREAMS_BASE_URL in .env}
