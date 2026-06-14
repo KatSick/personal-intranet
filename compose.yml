@@ -12,6 +12,7 @@ volumes:
   aiostreams_data:
   homepage_config:
   dozzle_data:
+  wud_data:
 
 networks:
   proxy:
@@ -80,6 +81,9 @@ services:
     restart: unless-stopped
     networks:
       - proxy
+    # WUD: the "2" tag floats across 2.x releases, so track it by digest.
+    labels:
+      wud.watch.digest: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - tsdproxy_data:/data
@@ -112,6 +116,8 @@ services:
       homepage.icon: "dockge.png"
       homepage.href: "https://dockge.${TAILNET:?set TAILNET in .env}/"
       homepage.description: "Docker stack manager"
+      # WUD: the "1" tag floats across 1.x releases, so track it by digest.
+      wud.watch.digest: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - dockge_data:/app/data
@@ -140,6 +146,8 @@ services:
       homepage.icon: "stremio.png"
       homepage.href: "https://aiostreams.${TAILNET:?set TAILNET in .env}/"
       homepage.description: "Stremio addon aggregator"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
     volumes:
       - aiostreams_data:/app/data
     environment:
@@ -173,9 +181,45 @@ services:
       homepage.icon: "dozzle.png"
       homepage.href: "https://dozzle.${TAILNET:?set TAILNET in .env}/"
       homepage.description: "Container log viewer"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - dozzle_data:/data
+
+  # WUD (What's Up Docker): watches the registry for newer images of every
+  # running container, shows them in a web UI, and pings Telegram when an update
+  # is available. Unlike Diun it has a dashboard, so it's exposed via tsdproxy as
+  # the tailnet node "wud" (HTTPS 443 -> WUD's 3000) and surfaced on Homepage. A
+  # default "local" watcher is auto-created from the mounted docker socket
+  # (read-only — we only notify, never auto-update), so no watcher config is
+  # needed. State lives in wud_data so it remembers what it has already flagged.
+  wud:
+    image: getwud/wud:latest
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - "3000"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "wud"
+      tsdproxy.port.1: "443/https:3000/http"
+      homepage.group: "Infrastructure"
+      homepage.name: "WUD"
+      homepage.icon: "whats-up-docker.png"
+      homepage.href: "https://wud.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Docker image update tracker"
+      # WUD watches itself too: :latest isn't semver, so track it by digest.
+      wud.watch.digest: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - wud_data:/store
+    environment:
+      - TZ=Europe/Kyiv
+      # Telegram trigger "1". Secrets come from .env.
+      - WUD_TRIGGER_TELEGRAM_1_BOTTOKEN=${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in .env}
+      - WUD_TRIGGER_TELEGRAM_1_CHATID=${TELEGRAM_CHAT_ID:?set TELEGRAM_CHAT_ID in .env}
 
   # Homepage: a single dashboard URL that auto-enumerates every app on this
   # host. It reads the docker socket and surfaces any container with homepage.*
@@ -192,6 +236,8 @@ services:
       tsdproxy.enable: "true"
       tsdproxy.name: "homepage"
       tsdproxy.port.1: "443/https:3000/http"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
     volumes:
       # Socket is needed for label-based service discovery; :ro is enough since
       # homepage only reads container metadata. Config volume keeps the
