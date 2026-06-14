@@ -11,6 +11,7 @@ volumes:
   tsdproxy_data:
   aiostreams_data:
   homepage_config:
+  dozzle_data:
 
 networks:
   proxy:
@@ -150,6 +151,31 @@ services:
       # it from tsdproxy's forwarded Host/Proto headers. Must match the tailnet
       # node name (tsdproxy.name above) -> https://aiostreams.<tailnet>.ts.net
       - BASE_URL=${AIOSTREAMS_BASE_URL:?set AIOSTREAMS_BASE_URL in .env}
+
+  # Dozzle: real-time web log viewer for every container on this host. It reads
+  # the docker socket (read-only — it only streams logs and metadata) and needs
+  # no per-container config. tsdproxy serves it as the tailnet node "dozzle",
+  # terminating HTTPS on 443 -> dozzle's 8080. dozzle_data persists auth/user
+  # state across restarts without host bind mounts (remote DOCKER_HOST safe).
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - "8080"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "dozzle"
+      tsdproxy.port.1: "443/https:8080/http"
+      homepage.group: "Infrastructure"
+      homepage.name: "Dozzle"
+      homepage.icon: "dozzle.png"
+      homepage.href: "https://dozzle.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Container log viewer"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - dozzle_data:/data
 
   # Homepage: a single dashboard URL that auto-enumerates every app on this
   # host. It reads the docker socket and surfaces any container with homepage.*
