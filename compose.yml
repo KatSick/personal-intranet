@@ -13,6 +13,7 @@ volumes:
   homepage_config:
   dozzle_data:
   wud_data:
+  pihole_data:
 
 networks:
   proxy:
@@ -78,6 +79,7 @@ configs:
 services:
   tsdproxy:
     image: almeidapaulopt/tsdproxy:2
+    container_name: tsdproxy
     restart: unless-stopped
     networks:
       - proxy
@@ -99,6 +101,7 @@ services:
 
   dockge:
     image: louislam/dockge:1
+    container_name: dockge
     restart: unless-stopped
     networks:
       - proxy
@@ -132,6 +135,7 @@ services:
   # DOCKER_HOST without host bind mounts.
   aiostreams:
     image: ghcr.io/viren070/aiostreams:latest
+    container_name: aiostreams
     restart: unless-stopped
     networks:
       - proxy
@@ -167,6 +171,7 @@ services:
   # state across restarts without host bind mounts (remote DOCKER_HOST safe).
   dozzle:
     image: amir20/dozzle:latest
+    container_name: dozzle
     restart: unless-stopped
     networks:
       - proxy
@@ -196,6 +201,7 @@ services:
   # needed. State lives in wud_data so it remembers what it has already flagged.
   wud:
     image: getwud/wud:latest
+    container_name: wud
     restart: unless-stopped
     networks:
       - proxy
@@ -221,12 +227,61 @@ services:
       - WUD_TRIGGER_TELEGRAM_1_BOTTOKEN=${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in .env}
       - WUD_TRIGGER_TELEGRAM_1_CHATID=${TELEGRAM_CHAT_ID:?set TELEGRAM_CHAT_ID in .env}
 
+  # Pi-hole (v6): network-wide DNS ad-blocker. Two faces with different reach:
+  #  - Admin UI: v6 serves it from FTL's embedded webserver on port 80, which we
+  #    `expose` on the proxy network so tsdproxy fronts it as the tailnet node
+  #    "pihole" (HTTPS 443 -> 80). HTTP only, so this is the same pattern as the
+  #    other apps.
+  #  - DNS: port 53 can't ride an HTTP proxy, so it's published straight to the
+  #    host (tcp+udp). Clients/routers point their resolver at the Docker host's
+  #    IP:53. This is the one service that publishes a host port by necessity.
+  # State (config, query DB, gravity/blocklists) lives in pihole_data:/etc/pihole
+  # so it survives restarts without host bind mounts (remote DOCKER_HOST safe).
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    # v6 bundles an NTP client; without CAP_SYS_TIME it can't set the system
+    # clock and logs "Insufficient permissions to set system time".
+    cap_add:
+      - SYS_TIME
+    networks:
+      - proxy
+    # DNS to the host; UI stays internal (tsdproxy reaches :80 over proxy net).
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+    expose:
+      - "80"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "pihole"
+      tsdproxy.port.1: "443/https:80/http"
+      homepage.group: "Infrastructure"
+      homepage.name: "Pi-hole"
+      homepage.icon: "pi-hole.png"
+      homepage.href: "https://pihole.${TAILNET:?set TAILNET in .env}/admin/"
+      homepage.description: "Network-wide DNS ad-blocker"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
+    volumes:
+      - pihole_data:/etc/pihole
+    environment:
+      - TZ=Europe/Kyiv
+      # v6 renamed the admin password var; secret comes from .env.
+      - FTLCONF_webserver_api_password=${PIHOLE_PASSWORD:?set PIHOLE_PASSWORD in .env}
+      # In bridge mode FTL's default listeningMode (LOCAL) only answers queries
+      # arriving on its own subnet, so LAN/tailnet clients reaching it through the
+      # published :53 get nothing. "all" makes it answer on every interface.
+      - FTLCONF_dns_listeningMode=all
+
   # Homepage: a single dashboard URL that auto-enumerates every app on this
   # host. It reads the docker socket and surfaces any container with homepage.*
   # labels (see dockge/aiostreams above). tsdproxy serves it as the tailnet node
   # "homepage", terminating HTTPS on 443 -> homepage's 3000.
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
     restart: unless-stopped
     networks:
       - proxy
