@@ -10,6 +10,7 @@ volumes:
     name: dockge_data
   tsdproxy_data:
   aiostreams_data:
+  homepage_config:
 
 networks:
   proxy:
@@ -43,6 +44,35 @@ configs:
       log:
         level: info
 
+  # Homepage reads its config from /app/config. We inject the two files that
+  # matter declaratively (the rest are auto-created as empty defaults at
+  # startup) so this works over a remote DOCKER_HOST with no host bind mounts.
+  # docker.yaml points homepage at the host's docker socket; every container
+  # carrying homepage.* labels is then auto-discovered — no services.yaml entries.
+  homepage_docker:
+    content: |
+      my-docker:
+        socket: /var/run/docker.sock
+  homepage_settings:
+    content: |
+      title: Intranet
+      headerStyle: clean
+      layout:
+        Infrastructure:
+          style: row
+          columns: 3
+        Media:
+          style: row
+          columns: 3
+  # Override the bundled sample files so their placeholder "My First Service"
+  # entries don't show up — everything real comes from docker label discovery.
+  homepage_services:
+    content: |
+      # Services are discovered from docker labels; nothing static here.
+  homepage_bookmarks:
+    content: |
+      []
+
 services:
   tsdproxy:
     image: almeidapaulopt/tsdproxy:2
@@ -75,6 +105,12 @@ services:
       tsdproxy.enable: "true"
       tsdproxy.name: "dockge"
       tsdproxy.port.1: "443/https:5001/http"
+      # Discovered by homepage over the docker socket and shown on the dashboard.
+      homepage.group: "Infrastructure"
+      homepage.name: "Dockge"
+      homepage.icon: "dockge.png"
+      homepage.href: "https://dockge.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Docker stack manager"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - dockge_data:/app/data
@@ -98,6 +134,11 @@ services:
       tsdproxy.enable: "true"
       tsdproxy.name: "aiostreams"
       tsdproxy.port.1: "443/https:3000/http"
+      homepage.group: "Media"
+      homepage.name: "AIOStreams"
+      homepage.icon: "stremio.png"
+      homepage.href: "https://aiostreams.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Stremio addon aggregator"
     volumes:
       - aiostreams_data:/app/data
     environment:
@@ -109,3 +150,38 @@ services:
       # it from tsdproxy's forwarded Host/Proto headers. Must match the tailnet
       # node name (tsdproxy.name above) -> https://aiostreams.<tailnet>.ts.net
       - BASE_URL=${AIOSTREAMS_BASE_URL:?set AIOSTREAMS_BASE_URL in .env}
+
+  # Homepage: a single dashboard URL that auto-enumerates every app on this
+  # host. It reads the docker socket and surfaces any container with homepage.*
+  # labels (see dockge/aiostreams above). tsdproxy serves it as the tailnet node
+  # "homepage", terminating HTTPS on 443 -> homepage's 3000.
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - "3000"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "homepage"
+      tsdproxy.port.1: "443/https:3000/http"
+    volumes:
+      # Socket is needed for label-based service discovery; :ro is enough since
+      # homepage only reads container metadata. Config volume keeps the
+      # auto-created default files (bookmarks/services/widgets) across restarts.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - homepage_config:/app/config
+    environment:
+      # Mandatory host-allowlist guard. Homepage is reached as the tailnet node
+      # "homepage", so permit that host (HTTPS terminates at tsdproxy).
+      - HOMEPAGE_ALLOWED_HOSTS=homepage.${TAILNET:?set TAILNET in .env}
+    configs:
+      - source: homepage_docker
+        target: /app/config/docker.yaml
+      - source: homepage_settings
+        target: /app/config/settings.yaml
+      - source: homepage_services
+        target: /app/config/services.yaml
+      - source: homepage_bookmarks
+        target: /app/config/bookmarks.yaml
