@@ -102,6 +102,9 @@ services:
   dockge:
     image: louislam/dockge:1
     container_name: dockge
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
@@ -136,6 +139,9 @@ services:
   aiostreams:
     image: ghcr.io/viren070/aiostreams:latest
     container_name: aiostreams
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
@@ -172,6 +178,9 @@ services:
   dozzle:
     image: amir20/dozzle:latest
     container_name: dozzle
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
@@ -202,6 +211,9 @@ services:
   wud:
     image: getwud/wud:latest
     container_name: wud
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
