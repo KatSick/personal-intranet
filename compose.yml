@@ -142,9 +142,6 @@ services:
   aiostreams:
     image: ghcr.io/viren070/aiostreams:latest
     container_name: aiostreams
-    # Disabled: only runs when the "extras" profile is enabled
-    # (`docker compose --profile extras up -d`).
-    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
@@ -181,9 +178,6 @@ services:
   aiomanager:
     image: ghcr.io/sonicx161/aiomanager:latest
     container_name: aiomanager
-    # Disabled: only runs when the "extras" profile is enabled
-    # (`docker compose --profile extras up -d`).
-    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
@@ -217,9 +211,6 @@ services:
   aiometadata:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
-    # Disabled: only runs when the "extras" profile is enabled
-    # (`docker compose --profile extras up -d`).
-    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
@@ -255,9 +246,6 @@ services:
   aiometadata_redis:
     image: redis:alpine
     container_name: aiometadata_redis
-    # Disabled: only runs when the "extras" profile is enabled
-    # (`docker compose --profile extras up -d`).
-    profiles: ["extras"]
     restart: unless-stopped
     networks:
       - proxy
