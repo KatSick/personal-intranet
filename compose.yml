@@ -10,6 +10,9 @@ volumes:
     name: dockge_data
   tsdproxy_data:
   aiostreams_data:
+  aiomanager_data:
+  aiometadata_data:
+  aiometadata_redis_data:
   homepage_config:
   dozzle_data:
   wud_data:
@@ -169,6 +172,105 @@ services:
       # it from tsdproxy's forwarded Host/Proto headers. Must match the tailnet
       # node name (tsdproxy.name above) -> https://aiostreams.<tailnet>.ts.net
       - BASE_URL=${AIOSTREAMS_BASE_URL:?set AIOSTREAMS_BASE_URL in .env}
+
+  # AIOManager (Stremio multi-account / addon manager). tsdproxy serves it as the
+  # tailnet node "aiomanager", terminating HTTPS on 443 -> the app's 1610. Runs on
+  # SQLite (DB_TYPE=sqlite) so no external DB is needed; the db and the
+  # auto-generated ENCRYPTION_KEY live under DATA_DIR in a named volume, surviving
+  # restarts over a remote DOCKER_HOST with no host bind mounts.
+  aiomanager:
+    image: ghcr.io/sonicx161/aiomanager:latest
+    container_name: aiomanager
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - "1610"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "aiomanager"
+      tsdproxy.port.1: "443/https:1610/http"
+      homepage.group: "Media"
+      homepage.name: "AIOManager"
+      homepage.icon: "stremio.png"
+      homepage.href: "https://aiomanager.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Stremio account & addon manager"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
+    volumes:
+      - aiomanager_data:/app/data
+    environment:
+      - DB_TYPE=sqlite
+      - DATA_DIR=/app/data
+      # The browser-side config UI calls the API at the tailnet node origin, so
+      # that origin has to be allow-listed for CORS.
+      - CORS_ORIGINS=https://aiomanager.${TAILNET:?set TAILNET in .env}
+
+  # AIOMetadata (power-user Stremio metadata aggregator). Needs Redis for its
+  # metadata/catalog cache; this is the JigSawFr Docker-packaged build (multi-arch,
+  # baked-in healthcheck). tsdproxy serves it as the tailnet node "aiometadata"
+  # (HTTPS 443 -> 1337). The SQLite db lives under /app/addon/data in a named
+  # volume, so it survives over a remote DOCKER_HOST with no host bind mounts.
+  aiometadata:
+    image: ghcr.io/jigsawfr/aiometadata-docker:latest
+    container_name: aiometadata
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - "1337"
+    depends_on:
+      aiometadata_redis:
+        condition: service_healthy
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "aiometadata"
+      tsdproxy.port.1: "443/https:1337/http"
+      homepage.group: "Media"
+      homepage.name: "AIOMetadata"
+      homepage.icon: "stremio.png"
+      homepage.href: "https://aiometadata.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Stremio metadata aggregator"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
+    volumes:
+      - aiometadata_data:/app/addon/data
+    environment:
+      - REDIS_URL=redis://aiometadata_redis:6379
+      # Public addon URL (no trailing slash); must match the tailnet node name
+      # (tsdproxy.name above) -> https://aiometadata.<tailnet>.ts.net
+      - HOST_NAME=https://aiometadata.${TAILNET:?set TAILNET in .env}
+      # TMDB key is required for movie/series metadata; secret comes from .env.
+      - TMDB_API=${AIOMETADATA_TMDB_API:?set AIOMETADATA_TMDB_API in .env}
+
+  # Redis backing store for AIOMetadata's cache. Internal to the proxy network —
+  # not fronted by tsdproxy. State persists in a named volume so the warmed cache
+  # survives restarts without host bind mounts.
+  aiometadata_redis:
+    image: redis:alpine
+    container_name: aiometadata_redis
+    # Disabled: only runs when the "extras" profile is enabled
+    # (`docker compose --profile extras up -d`).
+    profiles: ["extras"]
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      # WUD: :alpine isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
+    volumes:
+      - aiometadata_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Dozzle: real-time web log viewer for every container on this host. It reads
   # the docker socket (read-only — it only streams logs and metadata) and needs
