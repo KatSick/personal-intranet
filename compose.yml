@@ -13,6 +13,7 @@ volumes:
   aiomanager_data:
   aiometadata_data:
   aiometadata_redis_data:
+  watchly_redis_data:
   homepage_config:
   dozzle_data:
   wud_data:
@@ -254,6 +255,63 @@ services:
       wud.watch.digest: "true"
     volumes:
       - aiometadata_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Watchly (Stremio recommendation-catalog addon). Builds taste-based catalog
+  # rows from your watch history using TMDB metadata; all of its state is the
+  # Redis cache below, so the app container itself is stateless. tsdproxy serves
+  # it as the tailnet node "watchly" (HTTPS 443 -> the app's 8000).
+  watchly:
+    image: ghcr.io/timilsinabimal/watchly:latest
+    container_name: watchly
+    restart: unless-stopped
+    networks:
+      - proxy
+    expose:
+      - "8000"
+    depends_on:
+      watchly_redis:
+        condition: service_healthy
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "watchly"
+      tsdproxy.port.1: "443/https:8000/http"
+      homepage.group: "Media"
+      homepage.name: "Watchly"
+      homepage.icon: "stremio.png"
+      homepage.href: "https://watchly.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Stremio recommendation catalogs"
+      # WUD: :latest isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
+    environment:
+      - APP_ENV=production
+      - PORT=8000
+      - REDIS_URL=redis://watchly_redis:6379/0
+      # Public addon URL (no trailing slash); used to build the manifest and OAuth
+      # callbacks, so it must match the tailnet node name (tsdproxy.name above).
+      - HOST_NAME=https://watchly.${TAILNET:?set TAILNET in .env}
+      # TMDB key is required for catalog metadata; secret comes from .env.
+      - TMDB_API_KEY=${WATCHLY_TMDB_API_KEY:?set WATCHLY_TMDB_API_KEY in .env}
+      # Salt for token generation; secret comes from .env.
+      - TOKEN_SALT=${WATCHLY_TOKEN_SALT:?set WATCHLY_TOKEN_SALT in .env}
+
+  # Redis backing store for Watchly (its only persistent state). Internal to the
+  # proxy network — not fronted by tsdproxy. State persists in a named volume.
+  watchly_redis:
+    image: redis:alpine
+    container_name: watchly_redis
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      # WUD: :alpine isn't semver, so track this image by digest instead.
+      wud.watch.digest: "true"
+    volumes:
+      - watchly_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
