@@ -213,6 +213,16 @@ services:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
     restart: unless-stopped
+    # The 2.7.x image ships a stale ENTRYPOINT (`node dist/server.js`) but the
+    # build output moved into dist/server/, so it crashes with
+    # "Cannot find module '/app/dist/server.js'". Point it at the real entry
+    # (matches package.json "main"/"start"). Drop this once upstream fixes it.
+    entrypoint: ["node", "dist/server/server.js"]
+    # The image runs as uid 1001 (nodejs) but doesn't pre-create
+    # /app/addon/data, so the named-volume mountpoint is auto-created root-owned
+    # and 1001 can't write the SQLite db ("unable to open database file"). Run as
+    # root so the app owns its own data volume.
+    user: root
     networks:
       - proxy
     expose:
@@ -240,6 +250,9 @@ services:
       - HOST_NAME=https://aiometadata.${TAILNET:?set TAILNET in .env}
       # TMDB key is required for movie/series metadata; secret comes from .env.
       - TMDB_API=${AIOMETADATA_TMDB_API:?set AIOMETADATA_TMDB_API in .env}
+      # DATABASE_URI is mandatory (no default in 2.7.x). sqlite://<path> resolves
+      # relative to /app; point it at the SQLite db inside the mounted volume.
+      - DATABASE_URI=sqlite:///app/addon/data/addon.db
 
   # Redis backing store for AIOMetadata's cache. Internal to the proxy network —
   # not fronted by tsdproxy. State persists in a named volume so the warmed cache
