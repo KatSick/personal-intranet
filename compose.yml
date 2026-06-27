@@ -298,6 +298,11 @@ services:
       - TMDB_API_KEY=${WATCHLY_TMDB_API_KEY:?set WATCHLY_TMDB_API_KEY in .env}
       # Salt for token generation; secret comes from .env.
       - TOKEN_SALT=${WATCHLY_TOKEN_SALT:?set WATCHLY_TOKEN_SALT in .env}
+      # Optional Trakt OAuth app (trakt.tv/oauth/applications, redirect URI
+      # ${HOST_NAME}/auth/trakt/callback). When set, Trakt becomes a selectable
+      # history source on /configure. Unset by default so Watchly still starts.
+      - TRAKT_CLIENT_ID=${WATCHLY_TRAKT_CLIENT_ID:-}
+      - TRAKT_CLIENT_SECRET=${WATCHLY_TRAKT_CLIENT_SECRET:-}
 
   # Redis backing store for Watchly (its only persistent state). Internal to the
   # proxy network — not fronted by tsdproxy. State persists in a named volume.
