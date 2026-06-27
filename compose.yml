@@ -253,6 +253,9 @@ services:
       # DATABASE_URI is mandatory (no default in 2.7.x). sqlite://<path> resolves
       # relative to /app; point it at the SQLite db inside the mounted volume.
       - DATABASE_URI=sqlite:///app/addon/data/addon.db
+      # Optional TVDB key for series/anime metadata; without it TVDB lookups log
+      # "TVDB API Key is not configured". Empty default so the addon still starts.
+      - TVDB_API_KEY=${AIOMETADATA_TVDB_API_KEY:-}
 
   # Redis backing store for AIOMetadata's cache. Internal to the proxy network —
   # not fronted by tsdproxy. State persists in a named volume so the warmed cache
