@@ -71,6 +71,20 @@ configs:
         Media:
           style: row
           columns: 3
+  # AIOMetadata ships Node 20 while the app it packages declares `node >=24 <25`,
+  # and its bundled undici (8.x) reads `worker_threads.markAsUncloneable` - a
+  # Node 22+ API - unguarded at import time, so the image crashes on startup with
+  # "TypeError: webidl.util.markAsUncloneable is not a function" before any of our
+  # config is even read. Preloading this no-op shim defines the missing API so
+  # undici imports cleanly. markAsUncloneable only flags objects as unsafe to
+  # structuredClone/postMessage, which this addon never does, so the no-op is inert.
+  # Tracked upstream as JigSawFr/aiometadata-docker#3 / #5 (move to Node 24);
+  # drop this config and the NODE_OPTIONS below once a fixed image ships.
+  aiometadata_node_shim:
+    content: |
+      const wt = require('node:worker_threads')
+      if (typeof wt.markAsUncloneable !== 'function') wt.markAsUncloneable = () => {}
+
   # Override the bundled sample files so their placeholder "My First Service"
   # entries don't show up — everything real comes from docker label discovery.
   homepage_services:
@@ -213,10 +227,11 @@ services:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
     restart: unless-stopped
-    # The 2.7.x image ships a stale ENTRYPOINT (`node dist/server.js`) but the
+    # The image still ships a stale ENTRYPOINT (`node dist/server.js`) but the
     # build output moved into dist/server/, so it crashes with
     # "Cannot find module '/app/dist/server.js'". Point it at the real entry
-    # (matches package.json "main"/"start"). Drop this once upstream fixes it.
+    # (matches package.json "main"/"start"). Still broken as of 2.11.0; tracked
+    # upstream as JigSawFr/aiometadata-docker#2 - drop this once it's fixed.
     entrypoint: ["node", "dist/server/server.js"]
     # The image runs as uid 1001 (nodejs) but doesn't pre-create
     # /app/addon/data, so the named-volume mountpoint is auto-created root-owned
@@ -256,6 +271,21 @@ services:
       # Optional TVDB key for series/anime metadata; without it TVDB lookups log
       # "TVDB API Key is not configured". Empty default so the addon still starts.
       - TVDB_API_KEY=${AIOMETADATA_TVDB_API_KEY:-}
+      # Preload the Node 20 compatibility shim (see aiometadata_node_shim above).
+      - NODE_OPTIONS=--require=/aiometadata-node-shim.js
+    # The image's baked-in healthcheck probes /api/cache/health, an authenticated
+    # admin route that answers 401 without ADMIN_KEY, so the container is marked
+    # unhealthy even while serving fine. /health is the unauthenticated liveness
+    # endpoint. Tracked upstream as JigSawFr/aiometadata-docker#1 / #4.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:1337/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    configs:
+      - source: aiometadata_node_shim
+        target: /aiometadata-node-shim.js
 
   # Redis backing store for AIOMetadata's cache. Internal to the proxy network —
   # not fronted by tsdproxy. State persists in a named volume so the warmed cache
