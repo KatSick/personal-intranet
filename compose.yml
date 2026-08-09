@@ -18,6 +18,7 @@ volumes:
   dozzle_data:
   wud_data:
   pihole_data:
+  syncthing_data:
 
 networks:
   proxy:
@@ -498,6 +499,66 @@ services:
       # arriving on its own subnet, so LAN/tailnet clients reaching it through the
       # published :53 get nothing. "all" makes it answer on every interface.
       - FTLCONF_dns_listeningMode=all
+
+  # Syncthing: continuous file sync between this host and your other devices.
+  # Two faces with different reach, same split as Pi-hole:
+  #  - Web GUI: plain HTTP on 8384, only `expose`d on the proxy network, so
+  #    tsdproxy fronts it as the tailnet node "syncthing" (HTTPS 443 -> 8384).
+  #    The image already binds the GUI to 0.0.0.0 (STGUIADDRESS); that also
+  #    switches off Syncthing's localhost-only Host-header check, which would
+  #    otherwise answer the proxied hostname with "Host check error".
+  #  - Sync protocol: port 22000 speaks Syncthing's own BEP over TCP and QUIC
+  #    (UDP), not HTTP, so it can't ride an HTTP proxy and is published straight
+  #    to the host. Peers dial the Docker host's address on :22000 — reachable
+  #    over the tailnet, since this host is already a tailnet node via tsdproxy.
+  # Broadcast local discovery (21027/udp) is deliberately not published: docker
+  # bridge networking doesn't carry LAN broadcasts either way, so it can never
+  # work here. Peers find each other through global discovery/relays or an
+  # explicit address configured on the device.
+  # Config, device keys, the database and the synced folders all live under
+  # /var/syncthing in a named volume, so they survive restarts with no host bind
+  # mounts (remote DOCKER_HOST safe). The entrypoint runs as root and chowns
+  # that directory to PUID:PGID before dropping privileges, so the named volume's
+  # root-owned mountpoint is handled for us.
+  syncthing:
+    image: syncthing/syncthing:2
+    container_name: syncthing
+    # The device name peers see. Without it Syncthing picks up the random
+    # container hostname, which changes on every recreate.
+    hostname: syncthing
+    restart: unless-stopped
+    networks:
+      - proxy
+    # Sync traffic to the host; GUI stays internal (tsdproxy reaches :8384 over
+    # the proxy net).
+    ports:
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+    expose:
+      - "8384"
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "syncthing"
+      tsdproxy.port.1: "443/https:8384/http"
+      homepage.group: "Infrastructure"
+      homepage.name: "Syncthing"
+      homepage.icon: "syncthing.png"
+      homepage.href: "https://syncthing.${TAILNET:?set TAILNET in .env}/"
+      homepage.description: "Continuous file synchronisation"
+      # WUD: the "2" tag floats across 2.x releases, so track it by digest.
+      wud.watch.digest: "true"
+    volumes:
+      - syncthing_data:/var/syncthing
+    environment:
+      - PUID=1000
+      - PGID=1000
+    # The image ships its own healthcheck against /rest/noauth/health; no
+    # override needed here.
+    # Note: a fresh install has no GUI password, so Syncthing shows a red
+    # "remote access without a password" banner. There's no env var for GUI
+    # credentials (config-file only), so set a user/password once in Settings —
+    # it persists in syncthing_data. Until then the tailnet ACL is the only
+    # thing guarding admin access, same as dockge/dozzle/wud here.
 
   # Homepage: a single dashboard URL that auto-enumerates every app on this
   # host. It reads the docker socket and surfaces any container with homepage.*
