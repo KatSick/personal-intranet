@@ -72,18 +72,31 @@ configs:
           style: row
           columns: 3
   # AIOMetadata ships Node 20 while the app it packages declares `node >=24 <25`,
-  # and its bundled undici (8.x) reads `worker_threads.markAsUncloneable` - a
-  # Node 22+ API - unguarded at import time, so the image crashes on startup with
-  # "TypeError: webidl.util.markAsUncloneable is not a function" before any of our
-  # config is even read. Preloading this no-op shim defines the missing API so
-  # undici imports cleanly. markAsUncloneable only flags objects as unsafe to
-  # structuredClone/postMessage, which this addon never does, so the no-op is inert.
-  # Tracked upstream as JigSawFr/aiometadata-docker#3 / #5 (move to Node 24);
-  # drop this config and the NODE_OPTIONS below once a fixed image ships.
+  # so its bundled undici (8.x) reaches for two APIs Node 20 doesn't have. This
+  # preloaded shim defines both; drop it and the NODE_OPTIONS below once a fixed
+  # image ships. Tracked upstream as JigSawFr/aiometadata-docker#3 / #5 (move to
+  # Node 24).
+  #
+  # 1. `worker_threads.markAsUncloneable` (Node 22+) is read unguarded at import
+  #    time, so the image crashes on startup with "TypeError:
+  #    webidl.util.markAsUncloneable is not a function" before any of our config
+  #    is even read. It only flags objects as unsafe to structuredClone/
+  #    postMessage, which this addon never does, so the no-op is inert.
+  # 2. `Promise.withResolvers` (Node 22+) is called on every undici `fetch`, so
+  #    without it the container boots and answers /health but every TMDB/IMDB
+  #    lookup fails with "Promise.withResolvers is not a function" and metadata
+  #    comes back empty. The polyfill is the exact TC39 semantics.
   aiometadata_node_shim:
     content: |
       const wt = require('node:worker_threads')
       if (typeof wt.markAsUncloneable !== 'function') wt.markAsUncloneable = () => {}
+      if (typeof Promise.withResolvers !== 'function') {
+        Promise.withResolvers = function () {
+          let resolve, reject
+          const promise = new this((res, rej) => { resolve = res; reject = rej })
+          return { promise, resolve, reject }
+        }
+      }
 
   # Override the bundled sample files so their placeholder "My First Service"
   # entries don't show up — everything real comes from docker label discovery.
